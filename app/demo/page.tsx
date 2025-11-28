@@ -5,27 +5,43 @@ import { useState } from "react";
 type KuromaTrack = {
   title: string;
   artist: string;
-  album?: string;
+  album?: string | null;
+
+  // new backend (VM)
+  spotifyUrl?: string;
+  previewUrl?: string | null;
+
+  // older shape (Cloud Run demo)
   spotify_url?: string;
   preview_url?: string | null;
+
+  // ignore extra fields (id, imageUrl, etc.) for now
+  [key: string]: unknown;
 };
 
 type KuromaPlaylist = {
-  title: string | null;
-  description: string | null;
+  // old shape
+  title?: string | null;
+  // new backend shape
+  name?: string | null;
+
+  description?: string | null;
   tracks: KuromaTrack[];
+  [key: string]: unknown;
 };
 
 type KuromaEntities = {
   artist?: string | null;
   track?: string | null;
   genre?: string | null;
-  metadata?: Record<string, unknown>;
+  mood?: string | null;
+  activity?: string | null;
+  [key: string]: unknown;
 };
 
 type KuromaResponse = {
   intent: string;
-  query: string;
+  query?: string;
   entities: KuromaEntities;
   playlist?: KuromaPlaylist | null;
   tracks?: KuromaTrack[] | null;
@@ -33,7 +49,9 @@ type KuromaResponse = {
   answer?: string | null;
   confidence?: number | null;
   assistant_message?: string | null;
+  reply?: string | null;
   raw?: string;
+  [key: string]: unknown;
 };
 
 export default function DemoPage() {
@@ -70,8 +88,29 @@ export default function DemoPage() {
     }
   }
 
-  const playlist =
-    result?.intent === "playlist_from_prompt" ? result.playlist : null;
+  // Normalize playlist-producing intents:
+  // PLAYLIST_FROM_PROMPT, PLAYLIST, playlist_from_prompt (old)
+  const isPlaylistIntent =
+    result &&
+    ["playlist_from_prompt", "playlist", "playlist_from_prompt".toUpperCase()].includes(
+      result.intent.toLowerCase()
+    );
+
+  const playlist = isPlaylistIntent ? result?.playlist ?? null : null;
+
+  // Helper to normalize playlist title and track URLs
+  function getPlaylistTitle(p: KuromaPlaylist | null): string {
+    if (!p) return "Generated playlist";
+    return (p.title ?? p.name ?? "Generated playlist") || "Generated playlist";
+  }
+
+  function getSpotifyUrl(t: KuromaTrack): string | undefined {
+    return (t.spotifyUrl as string | undefined) ?? (t.spotify_url as string | undefined);
+  }
+
+  function getPreviewUrl(t: KuromaTrack): string | null | undefined {
+    return (t.previewUrl as string | null | undefined) ?? t.preview_url;
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-16">
@@ -79,8 +118,8 @@ export default function DemoPage() {
         Kuroma Intent Demo
       </h1>
       <p className="text-sm md:text-base text-zinc-400 mb-8 max-w-2xl">
-        Describe what you want. Kuroma sends it to your intent engine on Cloud
-        Run (Mistral + Spotify) and shows the structured response.
+        Describe what you want. Kuroma sends it to your intent engine (Mistral + Spotify)
+        and shows the structured response.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4 mb-10">
@@ -119,7 +158,7 @@ export default function DemoPage() {
           {playlist && playlist.tracks && playlist.tracks.length > 0 && (
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-5">
               <h2 className="text-2xl font-semibold mb-1">
-                {playlist.title || "Generated playlist"}
+                {getPlaylistTitle(playlist)}
               </h2>
               {playlist.description && (
                 <p className="text-sm text-zinc-400 mb-4">
@@ -128,50 +167,54 @@ export default function DemoPage() {
               )}
 
               <div className="divide-y divide-zinc-900">
-                {playlist.tracks.map((t, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-start justify-between gap-4 py-3"
-                  >
-                    <div className="flex gap-3">
-                      <div className="w-6 text-xs text-zinc-500">
-                        {idx + 1}.
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium">
-                          {t.title}
-                          <span className="text-zinc-400">
-                            {" "}
-                            – {t.artist}
-                          </span>
+                {playlist.tracks.map((t, idx) => {
+                  const spotifyUrl = getSpotifyUrl(t);
+                  const previewUrl = getPreviewUrl(t);
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-start justify-between gap-4 py-3"
+                    >
+                      <div className="flex gap-3">
+                        <div className="w-6 text-xs text-zinc-500">
+                          {idx + 1}.
                         </div>
-                        <div className="text-xs text-zinc-500">
-                          {t.album}
+                        <div>
+                          <div className="text-sm font-medium">
+                            {t.title}
+                            <span className="text-zinc-400">
+                              {" "}
+                              – {t.artist}
+                            </span>
+                          </div>
+                          <div className="text-xs text-zinc-500">
+                            {t.album}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      {t.preview_url && (
-                        <audio
-                          controls
-                          className="h-8"
-                          src={t.preview_url}
-                        />
-                      )}
-                      {t.spotify_url && (
-                        <a
-                          href={t.spotify_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs rounded-full border border-zinc-700 px-3 py-1 hover:border-violet-500"
-                        >
-                          Open in Spotify
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {previewUrl && (
+                          <audio
+                            controls
+                            className="h-8"
+                            src={previewUrl}
+                          />
+                        )}
+                        {spotifyUrl && (
+                          <a
+                            href={spotifyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs rounded-full border border-zinc-700 px-3 py-1 hover:border-violet-500"
+                          >
+                            Open in Spotify
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -180,7 +223,10 @@ export default function DemoPage() {
             <p className="text-xs text-zinc-500">
               No playlist produced for this intent, but the assistant intent is{" "}
               <span className="text-violet-300">{result.intent}</span>. Try a
-              playlist-style prompt.
+              playlist-style prompt like{" "}
+              <span className="italic">
+                "create a sad lofi playlist" or "jazz for studying".
+              </span>
             </p>
           )}
         </section>
@@ -191,7 +237,7 @@ export default function DemoPage() {
         <section className="mt-6">
           <h2 className="text-lg font-semibold mb-2">Raw response</h2>
           <pre className="text-xs bg-zinc-950 border border-zinc-800 rounded-xl p-4 overflow-x-auto text-zinc-200">
-{JSON.stringify(result, null, 2)}
+            {JSON.stringify(result, null, 2)}
           </pre>
         </section>
       )}
