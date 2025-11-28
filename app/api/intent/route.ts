@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const KUROMA_API_URL = process.env.KUROMA_INTENT_API_URL || "https://ai.kuroma.in";
+const KUROMA_API_URL = process.env.KUROMA_INTENT_API_URL || "https://ai.kuroma.in/chat";
 const KUROMA_API_KEY = process.env.KUROMA_INTENT_API_KEY; // Optional, not needed for VM unless you add auth
 
 type RequestBody = {
