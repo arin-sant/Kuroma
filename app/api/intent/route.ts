@@ -1,23 +1,24 @@
 import { NextResponse } from "next/server";
 
-const KUROMA_API_URL = process.env.KUROMA_INTENT_API_URL || "https://ai.kuroma.in/chat";
-const KUROMA_API_KEY = process.env.KUROMA_INTENT_API_KEY; // Optional, not needed for VM unless you add auth
+const KUROMA_API_URL =
+  process.env.KUROMA_INTENT_API_URL || "https://ai.kuroma.in/chat";
+const KUROMA_API_KEY = process.env.KUROMA_INTENT_API_KEY; // optional
 
 type RequestBody = {
   prompt?: string;
+  sessionId?: string; // optional session id from client
 };
 
 export async function POST(req: Request) {
-  // If no endpoint configured, use hardcoded default (good for dev)
   if (!KUROMA_API_URL) {
-    console.error("❌ KUROMA_INTENT_API_URL missing in .env.local");
+    console.error("❌ KUROMA_INTENT_API_URL missing in env");
     return NextResponse.json(
       { error: "Server misconfiguration: missing Kuroma API URL." },
       { status: 500 }
     );
   }
 
-  // Parse incoming JSON payload
+  // Parse incoming JSON
   let body: RequestBody;
   try {
     body = await req.json();
@@ -29,6 +30,8 @@ export async function POST(req: Request) {
   }
 
   const prompt = body.prompt?.trim();
+  const sessionId = body.sessionId?.trim();
+
   if (!prompt) {
     return NextResponse.json(
       { error: "Prompt is required." },
@@ -37,29 +40,37 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Construct Kuroma GET request with prompt
-    const url = new URL(KUROMA_API_URL);
-    url.searchParams.set("prompt", prompt);
+    // Build payload for Kuroma backend
+    const kuromaPayload: Record<string, unknown> = {
+      text: prompt,          // <-- matches FastAPI `text` param
+    };
 
-    // Optional: Authorization header if you secure the backend later
-    const headers: Record<string, string> = {};
+    if (sessionId) {
+      kuromaPayload.session_id = sessionId; // <-- matches FastAPI
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
     if (KUROMA_API_KEY) {
       headers["Authorization"] = `Bearer ${KUROMA_API_KEY}`;
     }
 
-    // Make GET request to Kuroma VM API
-    const res = await fetch(url.toString(), {
-      method: "GET",
+    // POST to Kuroma /chat endpoint
+    const res = await fetch(KUROMA_API_URL, {
+      method: "POST",
       headers,
+      body: JSON.stringify(kuromaPayload),
     });
 
-    // Parse response
     const text = await res.text();
     let parsed: unknown = null;
+
     try {
       parsed = JSON.parse(text);
     } catch {
-      parsed = text;
+      parsed = text; // if backend ever returns plain text
     }
 
     if (!res.ok) {
@@ -74,9 +85,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Return the backend result to client
     return NextResponse.json(parsed);
-
   } catch (err) {
     console.error("❌ Network error reaching Kuroma API:", err);
     return NextResponse.json(
