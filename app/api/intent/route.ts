@@ -1,24 +1,15 @@
 import { NextResponse } from "next/server";
 
 const KUROMA_API_URL =
-  process.env.KUROMA_INTENT_API_URL || "http://ai.kuroma.in/chat";
-const KUROMA_API_KEY = process.env.KUROMA_INTENT_API_KEY; // optional
+  process.env.KUROMA_INTENT_API_URL ?? "https://ai.kuroma.in/chat";
+const KUROMA_API_KEY = process.env.KUROMA_INTENT_API_KEY || ""; // optional
 
 type RequestBody = {
   prompt?: string;
-  sessionId?: string; // optional session id from client
 };
 
 export async function POST(req: Request) {
-  if (!KUROMA_API_URL) {
-    console.error("❌ KUROMA_INTENT_API_URL missing in env");
-    return NextResponse.json(
-      { error: "Server misconfiguration: missing Kuroma API URL." },
-      { status: 500 }
-    );
-  }
-
-  // Parse incoming JSON
+  // Parse incoming JSON payload
   let body: RequestBody;
   try {
     body = await req.json();
@@ -30,8 +21,6 @@ export async function POST(req: Request) {
   }
 
   const prompt = body.prompt?.trim();
-  const sessionId = body.sessionId?.trim();
-
   if (!prompt) {
     return NextResponse.json(
       { error: "Prompt is required." },
@@ -40,44 +29,29 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Build payload for Kuroma backend
-    const kuromaPayload: Record<string, unknown> = {
-      text: prompt,          // <-- matches FastAPI `text` param
-    };
-
-    if (sessionId) {
-      kuromaPayload.session_id = sessionId; // <-- matches FastAPI
-    }
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-
-    if (KUROMA_API_KEY) {
-      headers["Authorization"] = `Bearer ${KUROMA_API_KEY}`;
-    }
-
-    // POST to Kuroma /chat endpoint
+    // Call Kuroma AI backend as POST /chat with JSON { text }
     const res = await fetch(KUROMA_API_URL, {
       method: "POST",
-      headers,
-      body: JSON.stringify(kuromaPayload),
+      headers: {
+        "Content-Type": "application/json",
+        ...(KUROMA_API_KEY ? { Authorization: `Bearer ${KUROMA_API_KEY}` } : {}),
+      },
+      body: JSON.stringify({ text: prompt }),
     });
 
     const text = await res.text();
-    let parsed: unknown = null;
-
+    let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch {
-      parsed = text; // if backend ever returns plain text
+      parsed = text; // fallback if backend ever returns plain text
     }
 
     if (!res.ok) {
       console.error("❌ Kuroma API error:", res.status, parsed);
       return NextResponse.json(
         {
-          error: "Upstream intent API failed",
+          error: "Upstream Kuroma intent API failed",
           status: res.status,
           upstream: parsed,
         },
@@ -86,10 +60,13 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json(parsed);
-  } catch (err) {
+  } catch (err: any) {
     console.error("❌ Network error reaching Kuroma API:", err);
     return NextResponse.json(
-      { error: "Failed to connect to Kuroma intent API." },
+      {
+        error: "Failed to connect to Kuroma intent API.",
+        details: String(err?.message ?? err),
+      },
       { status: 500 }
     );
   }
