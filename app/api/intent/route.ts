@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const KUROMA_API_URL =
-  process.env.KUROMA_INTENT_API_URL || "https://ai.kuroma.in/chat";
+  process.env.KUROMA_INTENT_API_URL || "http://ai.kuroma.in/chat";
 const KUROMA_API_KEY = process.env.KUROMA_INTENT_API_KEY; // optional
 
 type RequestBody = {
